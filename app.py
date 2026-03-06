@@ -12,7 +12,7 @@ if getattr(sys, 'frozen', False):
 else:
     app = Flask(__name__)
 
-DOWNLOAD_FOLDER = r'C:\Users\alper\Downloads'
+DOWNLOAD_FOLDER = os.path.join(os.path.expanduser("~"), "Downloads")
 if not os.path.exists(DOWNLOAD_FOLDER):
     os.makedirs(DOWNLOAD_FOLDER)
 
