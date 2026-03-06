@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YT Downloader</title>
+    <style>
+        :root {
+            --bg: #05070a;
+            --card: #0f121a;
+            --accent: #ff3e3e;
+            --accent-glow: rgba(255, 62, 62, 0.3);
+            --border: #1f242d;
+            --text-main: #ffffff;
+            --text-dim: #8a8f98;
+        }
+
+        body {
+            background-color: var(--bg);
+            color: var(--text-main);
+            font-family: 'Inter', -apple-system, sans-serif;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        .app-card {
+            background: var(--card);
+            width: 100%;
+            max-width: 420px;
+            border-radius: 24px;
+            padding: 32px;
+            border: 1px solid var(--border);
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 32px;
+        }
+
+        .header h1 {
+            font-size: 24px;
+            margin: 0;
+            background: linear-gradient(90deg, #fff, #8a8f98);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .header p {
+            color: var(--text-dim);
+            font-size: 14px;
+            margin-top: 8px;
+        }
+
+        .input-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-dim);
+            margin-bottom: 8px;
+            font-weight: 700;
+        }
+
+        textarea, select {
+            width: 100%;
+            background: #161a23;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            color: white;
+            padding: 12px 16px;
+            font-size: 14px;
+            box-sizing: border-box;
+            transition: all 0.2s ease;
+        }
+
+        textarea:focus, select:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 4px var(--accent-glow);
+        }
+
+        .btn-download {
+            width: 100%;
+            background: var(--accent);
+            color: white;
+            border: none;
+            padding: 16px;
+            border-radius: 14px;
+            font-weight: 700;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            margin-top: 10px;
+        }
+
+        .btn-download:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px var(--accent-glow);
+        }
+
+        .btn-download:disabled {
+            background: #252a33;
+            color: #555;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .progress-box {
+            margin-top: 24px;
+            display: none;
+            background: #161a23;
+            padding: 20px;
+            border-radius: 16px;
+            border: 1px solid var(--border);
+        }
+
+        .stats {
+            display: flex;
+            justify-content: space-between;
+            font-size: 13px;
+            margin-bottom: 12px;
+        }
+
+        .bar-bg {
+            height: 6px;
+            background: #252a33;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .bar-fill {
+            height: 100%;
+            background: var(--accent);
+            width: 0%;
+            transition: width 0.4s ease;
+        }
+
+        #status-msg {
+            margin-top: 15px;
+            text-align: center;
+            font-size: 14px;
+            padding: 12px;
+            border-radius: 10px;
+            display: none;
+        }
+
+        .success { background: rgba(0, 255, 127, 0.1); color: #00ff7f; }
+        .error { background: rgba(255, 62, 62, 0.1); color: #ff3e3e; }
+    </style>
+</head>
+<body>
+
+<div class="app-card">
+    <div class="header">
+        <h1>YT Downloader</h1>
+        <p>Ultra-fast video & audio grabber</p>
+    </div>
+
+    <form id="dl-form">
+        <div class="input-group">
+            <label>Video / Playlist Links</label>
+            <textarea id="urls" name="urls" rows="3" placeholder="Paste links here..."></textarea>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+            <div class="input-group">
+                <label>Format</label>
+                <select id="format_type" name="format_type">
+                    <option value="video">MP4 Video</option>
+                    <option value="audio">MP3 Audio</option>
+                </select>
+            </div>
+            <div class="input-group">
+                <label>Quality</label>
+                <select id="quality" name="quality">
+                    <option value="2160">4K UHD</option>
+                    <option value="1080" selected>1080p</option>
+                    <option value="720">720p</option>
+                </select>
+            </div>
+        </div>
+
+        <button type="submit" id="dl-btn" class="btn-download">START DOWNLOAD</button>
+    </form>
+
+    <div class="progress-box" id="p-box">
+        <div class="stats">
+            <span id="p-status">Working...</span>
+            <span id="p-percent">0%</span>
+        </div>
+        <div class="bar-bg">
+            <div class="bar-fill" id="p-fill"></div>
+        </div>
+        <div style="display: flex; justify-content: space-between; margin-top: 10px; font-size: 11px; color: var(--text-dim);">
+            <span id="p-speed">Speed: -</span>
+            <span id="p-eta">ETA: -</span>
+        </div>
+    </div>
+
+    <div id="status-msg"></div>
+</div>
+
+<script>
+    let interval;
+    const form = document.getElementById('dl-form');
+    const btn = document.getElementById('dl-btn');
+    const pBox = document.getElementById('p-box');
+    const statusMsg = document.getElementById('status-msg');
+
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        btn.disabled = true;
+        btn.innerText = "PROCESSING...";
+        pBox.style.display = "block";
+        statusMsg.style.display = "none";
+        
+        interval = setInterval(async () => {
+            const res = await fetch('/progress');
+            const data = await res.json();
+            document.getElementById('p-fill').style.width = data.percent + "%";
+            document.getElementById('p-percent').innerText = data.percent + "%";
+            document.getElementById('p-status').innerText = data.status;
+            document.getElementById('p-speed').innerText = "Speed: " + data.speed;
+            document.getElementById('p-eta').innerText = "ETA: " + data.eta;
+        }, 1000);
+
+        const res = await fetch('/download', { method: 'POST', body: new FormData(form) });
+        const result = await res.json();
+        
+        clearInterval(interval);
+        btn.disabled = false;
+        btn.innerText = "START DOWNLOAD";
+        statusMsg.style.display = "block";
+        statusMsg.className = result.status === 'success' ? 'success' : 'error';
+        statusMsg.innerText = result.message;
+    });
+</script>
+
+</body>
+</html>
