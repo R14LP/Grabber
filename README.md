@@ -1,14 +1,15 @@
 # 🎬 YT Downloader
 
-A modern, dark-themed YouTube video and audio downloader built with Python. 
+A highly intelligent, dark-themed video and audio downloader built with Python. 
 
 [🚀 Download Latest Version (.exe)](https://github.com/R14LP/YT-Downloader/releases/latest)
 
-## ✨ Features
-- **High Quality:** Download in 4K, 1080p, or 720p.
+## ✨ Smart Features & Architecture
+- **IDM Integration:** Intelligently detects Internet Download Manager (IDM). If a clean, single-part MP4 link is found, it automatically forwards the download to IDM for maximum speed.
+- **Concurrent Turbo Mode:** For streaming sites that use `.m3u8` or `.mpd` (where IDM fails), the app seamlessly switches to its native turbo mode, downloading from **10 simultaneous fragments** to bypass server speed limits.
+- **High Quality:** Auto-merges video and audio to deliver true 4K, 1080p, or 720p without quality loss.
 - **MP3 Conversion:** Extract high-quality audio from any video.
-- **Modern UI:** Sleek, cyber-glass dark theme.
-- **Batch Support:** Download multiple links or entire playlists.
+- **Modern UI:** Sleek, responsive, cyber-glass dark theme using PyWebview.
 - **Portable:** Single standalone `.exe` file.
 
 ## 🛠️ Installation (For Developers)

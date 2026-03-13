@@ -5,6 +5,7 @@ import re
 import sys
 import threading
 import webview
+import subprocess
 
 if getattr(sys, 'frozen', False):
     template_folder = os.path.join(sys._MEIPASS, 'templates')
@@ -17,6 +18,16 @@ if not os.path.exists(DOWNLOAD_FOLDER):
     os.makedirs(DOWNLOAD_FOLDER)
 
 progress_data = { 'status': 'Idle', 'percent': 0.0, 'speed': '', 'eta': '' }
+
+def get_idm_path():
+    paths = [
+        r"C:\Program Files (x86)\Internet Download Manager\IDMan.exe",
+        r"C:\Program Files\Internet Download Manager\IDMan.exe"
+    ]
+    for p in paths:
+        if os.path.exists(p):
+            return p
+    return None
 
 def remove_ansi_colors(text):
     ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
@@ -53,27 +64,68 @@ def download():
     if not urls: 
         return jsonify({"status": "error", "message": "No links provided."})
 
-    ydl_opts = {
-        'outtmpl': os.path.join(DOWNLOAD_FOLDER, '%(title)s.%(ext)s'),
-        'noplaylist': False,
-        'quiet': True,
-        'progress_hooks': [progress_hook],
-    }
+    idm_path = get_idm_path()
+    downloads_completed = 0
 
-    if format_type == 'audio':
-        ydl_opts.update({'format': 'bestaudio/best', 'postprocessors': [{'key': 'FFmpegExtractAudio', 'preferredcodec': 'mp3', 'preferredquality': '192'}]})
+    for url in urls:
+        use_idm = False
+
+        if idm_path and format_type == 'video':
+            progress_data.update({'status': 'Analyzing link...', 'percent': 30.0})
+            try:
+                ydl_opts_extract = {
+                    'format': f'bestvideo[height<={quality}]+bestaudio/best[height<={quality}]/best',
+                    'quiet': True,
+                    'noplaylist': True
+                }
+                with yt_dlp.YoutubeDL(ydl_opts_extract) as ydl:
+                    info_best = ydl.extract_info(url, download=False)
+                    is_merged = 'requested_formats' in info_best
+                    direct_url = info_best.get('url', '')
+                    protocol = info_best.get('protocol', '').lower()
+                    is_m3u8 = 'm3u8' in protocol or '.m3u8' in direct_url
+                    is_dash = 'dash' in protocol or '.mpd' in direct_url
+                    
+                    if not is_merged and not is_m3u8 and not is_dash and direct_url.startswith('http'):
+                        clean_title = re.sub(r'[\\/*?:"<>|]', "", info_best.get('title', 'Video'))
+                        ext = info_best.get('ext', 'mp4')
+                        filename = f"{clean_title}.{ext}"
+                        
+                        progress_data.update({'status': 'IDM Started!', 'percent': 100.0})
+                        subprocess.Popen([idm_path, '/d', direct_url, '/p', DOWNLOAD_FOLDER, '/f', filename])
+                        use_idm = True
+                        downloads_completed += 1
+            except Exception as e:
+                pass
+
+        if not use_idm:
+            ydl_opts = {
+                'outtmpl': os.path.join(DOWNLOAD_FOLDER, '%(title)s.%(ext)s'),
+                'noplaylist': False,
+                'quiet': True,
+                'progress_hooks': [progress_hook],
+                'concurrent_fragment_downloads': 10, 
+            }
+
+            if format_type == 'audio':
+                ydl_opts.update({'format': 'bestaudio/best', 'postprocessors': [{'key': 'FFmpegExtractAudio', 'preferredcodec': 'mp3', 'preferredquality': '192'}]})
+            else:
+                ydl_opts.update({
+                    'format': f'bestvideo[height<={quality}]+bestaudio/best[height<={quality}]/best', 
+                    'merge_output_format': 'mp4'
+                })
+
+            try:
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    ydl.download([url])
+                    downloads_completed += 1
+            except Exception as e:
+                return jsonify({"status": "error", "message": f"Error: {str(e)}"})
+
+    if downloads_completed > 0:
+        return jsonify({"status": "success", "message": "All operations completed!"})
     else:
-        ydl_opts.update({
-            'format': f'bestvideo[height<={quality}]+bestaudio/best[height<={quality}]/best', 
-            'merge_output_format': 'mp4'
-        })
-
-    try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download(urls)
-        return jsonify({"status": "success", "message": "All downloads completed!"})
-    except Exception as e:
-        return jsonify({"status": "error", "message": f"Error: {str(e)}"})
+        return jsonify({"status": "error", "message": "Failed to download."})
 
 def start_server():
     app.run(port=5000, use_reloader=False)
@@ -83,6 +135,5 @@ if __name__ == '__main__':
     t.daemon = True
     t.start()
     
-    # Updated title to "YT Downloader"
-    webview.create_window('YT Downloader', 'http://localhost:5000', width=500, height=750, resizable=False)
+    webview.create_window('YT Downloader', 'http://localhost:5000', width=500, height=750, resizable=True)
     webview.start()
