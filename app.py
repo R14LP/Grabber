@@ -5,127 +5,156 @@ import re
 import sys
 import threading
 import webview
-import subprocess
 
 if getattr(sys, 'frozen', False):
     template_folder = os.path.join(sys._MEIPASS, 'templates')
     app = Flask(__name__, template_folder=template_folder)
+    app_path = os.path.dirname(sys.executable)
 else:
     app = Flask(__name__)
+    app_path = os.path.dirname(os.path.abspath(__file__))
 
 DOWNLOAD_FOLDER = os.path.join(os.path.expanduser("~"), "Downloads")
 if not os.path.exists(DOWNLOAD_FOLDER):
     os.makedirs(DOWNLOAD_FOLDER)
 
-progress_data = { 'status': 'Idle', 'percent': 0.0, 'speed': '', 'eta': '' }
-
-def get_idm_path():
-    paths = [
-        r"C:\Program Files (x86)\Internet Download Manager\IDMan.exe",
-        r"C:\Program Files\Internet Download Manager\IDMan.exe"
-    ]
-    for p in paths:
-        if os.path.exists(p):
-            return p
-    return None
+# { video_id: { title, status, percent, speed, eta, done, error } }
+downloads = {}
+downloads_lock = threading.Lock()
 
 def remove_ansi_colors(text):
     ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
     return ansi_escape.sub('', text)
 
-def progress_hook(d):
-    if d['status'] == 'downloading':
-        progress_data['status'] = 'Downloading...'
-        percent_str = remove_ansi_colors(d.get('_percent_str', '0.0%')).strip()
-        try: progress_data['percent'] = float(percent_str.replace('%', ''))
-        except: progress_data['percent'] = 0.0
-        progress_data['speed'] = remove_ansi_colors(d.get('_speed_str', '-')).strip()
-        progress_data['eta'] = remove_ansi_colors(d.get('_eta_str', '-')).strip()
-    elif d['status'] == 'finished':
-        progress_data['status'] = 'Finalizing...'
-        progress_data['percent'] = 100.0
+def make_hook(vid_id):
+    def progress_hook(d):
+        with downloads_lock:
+            if vid_id not in downloads:
+                return
+            if d['status'] == 'downloading':
+                downloads[vid_id]['status'] = 'Downloading...'
+                percent_str = remove_ansi_colors(d.get('_percent_str', '0.0%')).strip()
+                try:
+                    downloads[vid_id]['percent'] = float(percent_str.replace('%', ''))
+                except:
+                    downloads[vid_id]['percent'] = 0.0
+                downloads[vid_id]['speed'] = remove_ansi_colors(d.get('_speed_str', '-')).strip()
+                downloads[vid_id]['eta'] = remove_ansi_colors(d.get('_eta_str', '-')).strip()
+            elif d['status'] == 'finished':
+                downloads[vid_id]['status'] = 'Finalizing...'
+                downloads[vid_id]['percent'] = 100.0
+    return progress_hook
 
 @app.route('/')
-def index(): 
+def index():
     return render_template('index.html')
 
 @app.route('/progress')
-def progress(): 
-    return jsonify(progress_data)
+def progress():
+    with downloads_lock:
+        return jsonify(downloads)
 
 @app.route('/download', methods=['POST'])
 def download():
-    progress_data.update({'status': 'Initializing...', 'percent': 0.0, 'speed': '', 'eta': ''})
     urls_text = request.form.get('urls')
     format_type = request.form.get('format_type')
     quality = request.form.get('quality')
     urls = [url.strip() for url in urls_text.split('\n') if url.strip()]
 
-    if not urls: 
+    if not urls:
         return jsonify({"status": "error", "message": "No links provided."})
 
-    idm_path = get_idm_path()
-    downloads_completed = 0
-
+    # Önce tüm video bilgilerini çek
+    all_entries = []
     for url in urls:
-        use_idm = False
+        try:
+            extract_opts = {
+                'quiet': True,
+                'noplaylist': False,
+                'extract_flat': 'in_playlist',
+            }
+            with yt_dlp.YoutubeDL(extract_opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+                if 'entries' in info:
+                    for entry in info['entries']:
+                        all_entries.append({
+                            'url': entry.get('url') or entry.get('webpage_url') or f"https://www.youtube.com/watch?v={entry['id']}",
+                            'title': entry.get('title', 'Unknown')
+                        })
+                else:
+                    all_entries.append({
+                        'url': url,
+                        'title': info.get('title', 'Unknown')
+                    })
+        except Exception as e:
+            all_entries.append({'url': url, 'title': url})
 
-        if idm_path and format_type == 'video':
-            progress_data.update({'status': 'Analyzing link...', 'percent': 30.0})
-            try:
-                ydl_opts_extract = {
-                    'format': f'bestvideo[height<={quality}]+bestaudio/best[height<={quality}]/best',
-                    'quiet': True,
-                    'noplaylist': True
-                }
-                with yt_dlp.YoutubeDL(ydl_opts_extract) as ydl:
-                    info_best = ydl.extract_info(url, download=False)
-                    is_merged = 'requested_formats' in info_best
-                    direct_url = info_best.get('url', '')
-                    protocol = info_best.get('protocol', '').lower()
-                    is_m3u8 = 'm3u8' in protocol or '.m3u8' in direct_url
-                    is_dash = 'dash' in protocol or '.mpd' in direct_url
-                    
-                    if not is_merged and not is_m3u8 and not is_dash and direct_url.startswith('http'):
-                        clean_title = re.sub(r'[\\/*?:"<>|]', "", info_best.get('title', 'Video'))
-                        ext = info_best.get('ext', 'mp4')
-                        filename = f"{clean_title}.{ext}"
-                        
-                        progress_data.update({'status': 'IDM Started!', 'percent': 100.0})
-                        subprocess.Popen([idm_path, '/d', direct_url, '/p', DOWNLOAD_FOLDER, '/f', filename])
-                        use_idm = True
-                        downloads_completed += 1
-            except Exception as e:
-                pass
+    # downloads dict'i hazırla
+    with downloads_lock:
+        downloads.clear()
+        for i, entry in enumerate(all_entries):
+            vid_id = str(i)
+            downloads[vid_id] = {
+                'title': entry['title'],
+                'url': entry['url'],
+                'status': 'Waiting...',
+                'percent': 0.0,
+                'speed': '-',
+                'eta': '-',
+                'done': False,
+                'error': False,
+            }
 
-        if not use_idm:
+    def run_downloads():
+        for i, entry in enumerate(all_entries):
+            vid_id = str(i)
+            with downloads_lock:
+                downloads[vid_id]['status'] = 'Starting...'
+
             ydl_opts = {
                 'outtmpl': os.path.join(DOWNLOAD_FOLDER, '%(title)s.%(ext)s'),
-                'noplaylist': False,
+                'noplaylist': True,
                 'quiet': True,
-                'progress_hooks': [progress_hook],
-                'concurrent_fragment_downloads': 10, 
+                'progress_hooks': [make_hook(vid_id)],
+                'concurrent_fragment_downloads': 10,
+                'ffmpeg_location': app_path,
             }
 
             if format_type == 'audio':
-                ydl_opts.update({'format': 'bestaudio/best', 'postprocessors': [{'key': 'FFmpegExtractAudio', 'preferredcodec': 'mp3', 'preferredquality': '192'}]})
+                ydl_opts.update({
+                    'format': 'bestaudio/best',
+                    'postprocessors': [{
+                        'key': 'FFmpegExtractAudio',
+                        'preferredcodec': 'mp3',
+                        'preferredquality': quality
+                    }]
+                })
             else:
                 ydl_opts.update({
-                    'format': f'bestvideo[height<={quality}]+bestaudio/best[height<={quality}]/best', 
-                    'merge_output_format': 'mp4'
+                    'format': f'bestvideo[height<={quality}]+bestaudio/best[height<={quality}]/best',
+                    'merge_output_format': 'mp4',
+                    'postprocessor_args': {
+                        'ffmpeg': ['-c:a', 'aac', '-b:a', '192k']
+                    }
                 })
 
             try:
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    ydl.download([url])
-                    downloads_completed += 1
+                    ydl.download([entry['url']])
+                with downloads_lock:
+                    downloads[vid_id]['status'] = 'Done'
+                    downloads[vid_id]['percent'] = 100.0
+                    downloads[vid_id]['done'] = True
             except Exception as e:
-                return jsonify({"status": "error", "message": f"Error: {str(e)}"})
+                with downloads_lock:
+                    downloads[vid_id]['status'] = f'Error: {str(e)}'
+                    downloads[vid_id]['error'] = True
 
-    if downloads_completed > 0:
-        return jsonify({"status": "success", "message": "All operations completed!"})
-    else:
-        return jsonify({"status": "error", "message": "Failed to download."})
+    t = threading.Thread(target=run_downloads)
+    t.daemon = True
+    t.start()
+
+    return jsonify({"status": "success", "count": len(all_entries)})
 
 def start_server():
     app.run(port=5000, use_reloader=False)
@@ -134,6 +163,6 @@ if __name__ == '__main__':
     t = threading.Thread(target=start_server)
     t.daemon = True
     t.start()
-    
-    webview.create_window('YT Downloader', 'http://localhost:5000', width=500, height=750, resizable=True)
+
+    webview.create_window('YT Downloader', 'http://localhost:5000', width=520, height=800, resizable=True)
     webview.start()
