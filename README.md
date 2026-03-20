@@ -24,16 +24,3 @@ A fast, dark-themed video and audio downloader built with Python.
 ## License
 
 MIT License - feel free to use and modify!
-```
-
-```
-What's New in v1.3.0
-
-- Removed IDM dependency — app now handles all downloads natively with 10-thread turbo mode
-- Fixed audio codec issue: merged MP4s now use AAC encoding, compatible with Windows Media Player
-- Per-video progress tracking: each video in a playlist gets its own progress bar
-- MP3 bitrate selector: choose 128, 192, or 320 kbps
-- Added 480p quality option for video downloads
-- Redesigned UI: fully responsive, scales with window size, new typography and layout
-
-Download YT_Downloader_Setup_v1.3.0.exe below.
