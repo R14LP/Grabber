@@ -46,10 +46,11 @@ python app.py
 
 ## Building
 ```bash
-py -m PyInstaller --clean --onefile --noconsole --add-data "templates;templates" --name "YT_Downloader" app.py
+py -m PyInstaller --clean --onefile --noconsole --add-data "templates;templates" --icon "icon.ico" --name "YT_Downloader" app.py
 ```
 
-Place `ffmpeg.exe` and `ffprobe.exe` next to `YT_Downloader.exe` in `dist/`.
+Place `ffmpeg.exe`, `ffprobe.exe`, and `icon.ico` next to `app.py` before building.
+After building, place `ffmpeg.exe` and `ffprobe.exe` next to `YT_Downloader.exe` in `dist/`.
 
 ## License
 
