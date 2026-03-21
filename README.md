@@ -6,25 +6,18 @@ A fast, dark-themed video and audio downloader built with Python and Flask.
 
 ## Features
 
-- **Analyze before download:** Paste a link, analyze it to see thumbnail, title, duration and available resolutions before downloading
+- **Analyze before download:** See thumbnail, title, duration and available resolutions before downloading
 - **Turbo Mode:** 10 simultaneous fragment downloads
 - **High Quality:** Auto-merges video and audio — 4K, 1080p, 720p, 480p
 - **WMP Compatible:** Audio re-encoded to AAC, works with Windows Media Player
 - **MP3 Conversion:** Extract audio at 128, 192, or 320 kbps
 - **Per-Video Progress:** Each video gets its own real-time progress bar with speed and ETA
-- **Playlist Support:** Paste a playlist URL, every video listed and downloaded separately
-- **Preview:** Click thumbnail after download to preview in-app
+- **Playlist Support:** Every video in a playlist listed and downloaded separately
+- **Preview:** Click thumbnail after download to watch in-app
 - **Open / Show in Folder:** Quick access buttons after download completes
 - **Responsive UI:** Dark theme, scales with window size
 
 ## Running from Source
-
-### Requirements
-
-- Python 3.11
-- ffmpeg and ffprobe
-
-### Setup
 
 **1. Clone the repo**
 ```bash
@@ -47,12 +40,12 @@ Extract `ffmpeg.exe` and `ffprobe.exe`, place them in the same folder as `app.py
 python app.py
 ```
 
-## Building the exe yourself
+## Building
 ```bash
 py -m PyInstaller --clean --onefile --noconsole --add-data "templates;templates" --name "YT_Downloader" app.py
 ```
 
-After building, place `ffmpeg.exe` and `ffprobe.exe` next to `YT_Downloader.exe` in the `dist/` folder.
+Place `ffmpeg.exe` and `ffprobe.exe` next to `YT_Downloader.exe` in `dist/`.
 
 ## License
 
