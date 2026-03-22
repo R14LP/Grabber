@@ -4,6 +4,14 @@ A fast, dark-themed video and audio downloader built with Python and Flask.
 
 [Download Latest Version](https://github.com/R14LP/YT-Downloader/releases/latest)
 
+## Changelog
+
+### v2.0.1
+- Fixed UPDATE button opening a new window
+
+### v2.0.0
+- Initial major release
+
 ## Features
 
 - **Analyze before download:** See thumbnail, title, duration and available resolutions before downloading
