@@ -311,7 +311,6 @@
             gap: 10px;
         }
 
-        /* Drag to reorder */
         .analyze-item {
             background: var(--surface);
             border: 1px solid var(--border);
@@ -421,7 +420,6 @@
         .sub-lang-wrap { display: flex; flex-direction: column; gap: 4px; }
         .sub-lang-label { font-size: 9px; color: var(--text-dim); letter-spacing: 1px; }
 
-        /* Clip input */
         .clip-toggle {
             background: var(--surface2);
             border: 1px solid var(--border);
@@ -462,7 +460,6 @@
         .clip-input:focus { outline: none; border-color: var(--yellow); }
         .clip-label { font-size: 9px; color: var(--text-dim); }
 
-        /* Playlist entries */
         .playlist-entries {
             border-top: 1px solid var(--border);
             max-height: 200px;
@@ -571,7 +568,6 @@
             cursor: not-allowed;
         }
 
-        /* Cancel all button */
         .btn-cancel-all {
             width: 100%;
             background: transparent;
@@ -714,11 +710,7 @@
             margin-right: 10px;
         }
 
-        .dl-actions {
-            display: flex;
-            gap: 6px;
-            flex-shrink: 0;
-        }
+        .dl-actions { display: flex; gap: 6px; flex-shrink: 0; }
 
         .action-btn {
             background: var(--surface2);
@@ -881,7 +873,7 @@
 <div class="wrapper">
     <div class="header">
         <h1>YT<span>.</span>DL</h1>
-        <span class="version-tag">v2.0.1</span>
+        <span class="version-tag">v2.1.0</span>
         <div class="header-actions">
             <button class="update-btn" id="update-btn" onclick="updateYtdlp()">UPDATE</button>
             <button class="settings-btn" id="settings-btn" onclick="toggleSettings()">SETTINGS</button>
@@ -929,6 +921,7 @@
 
     <div class="tabs">
         <button class="tab-btn active" id="tab-btn-download" onclick="switchTab('download', this)">DOWNLOAD</button>
+        <button class="tab-btn" id="tab-btn-kick" onclick="switchTab('kick', this)">KICK</button>
         <button class="tab-btn" id="tab-btn-history" onclick="switchTab('history', this)">HISTORY</button>
     </div>
 
@@ -946,6 +939,54 @@
         <button id="dl-btn" class="btn-download" style="display:none">START DOWNLOAD</button>
         <button id="cancel-all-btn" class="btn-cancel-all" onclick="cancelAll()">CANCEL ALL</button>
         <div id="dl-list"></div>
+    </div>
+
+    <div id="tab-kick" class="tab-panel">
+        <div class="folder-row">
+            <span class="folder-path" id="kick-folder-path">Loading...</span>
+            <button class="btn-folder" onclick="selectFolder()">Change</button>
+        </div>
+        <div class="section-label">Kick VOD or Clip URL</div>
+        <textarea id="kick-url" rows="2" placeholder="https://kick.com/channel/videos/... or .../clips/..."></textarea>
+        <button id="kick-analyze-btn" class="btn-analyze" onclick="kickAnalyze()">ANALYZE</button>
+
+        <div id="kick-result" style="margin-top:14px;display:none">
+            <div class="analyze-item" style="cursor:default">
+                <div class="thumb-wrap">
+                    <img id="kick-thumb" src="" alt="" style="display:none">
+                    <div id="kick-thumb-placeholder" class="thumb-no-preview">NO PREVIEW</div>
+                </div>
+                <div class="analyze-info">
+                    <div class="analyze-title" id="kick-title"></div>
+                    <div class="analyze-meta" id="kick-duration"></div>
+                    <div class="analyze-controls">
+                        <select id="kick-fmt">
+                            <option value="video">MP4 Video</option>
+                            <option value="audio">MP3 Audio</option>
+                        </select>
+                        <select id="kick-qual">
+                            <option value="best">Best</option>
+                            <option value="1080">1080p</option>
+                            <option value="720">720p</option>
+                            <option value="480">480p</option>
+                            <option value="360">360p</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <button class="btn-download" onclick="kickDownload()">DOWNLOAD</button>
+        </div>
+
+        <div id="kick-error" style="margin-top:14px;display:none">
+            <div class="analyze-item" style="cursor:default">
+                <div class="analyze-info">
+                    <div class="analyze-title" style="color:var(--red)">Error</div>
+                    <div class="analyze-meta" id="kick-error-msg"></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="kick-dl-list" style="margin-top:20px;display:flex;flex-direction:column;gap:10px"></div>
     </div>
 
     <div id="tab-history" class="tab-panel">
@@ -983,12 +1024,11 @@
     let analyzedItems = [];
     let pollInterval = null;
     const thumbCache = {};
-
-    // Drag to reorder state
     let dragSrcEl = null;
 
     fetch('/get_settings').then(r => r.json()).then(d => {
         document.getElementById('folder-path').textContent = d.folder;
+        document.getElementById('kick-folder-path').textContent = d.folder;
         document.getElementById('speed-limit').value = d.speed_limit || '';
         const mc = document.getElementById('max-concurrent');
         if (mc) mc.value = String(d.max_concurrent || 1);
@@ -1044,6 +1084,7 @@
         const data = await res.json();
         if (data.status === 'ok') {
             document.getElementById('folder-path').textContent = data.folder;
+            document.getElementById('kick-folder-path').textContent = data.folder;
         }
     }
 
@@ -1135,7 +1176,6 @@
         }
     });
 
-    // Drag to reorder analyze items
     function addDragHandlers(el) {
         el.addEventListener('dragstart', (e) => {
             dragSrcEl = el;
@@ -1173,11 +1213,8 @@
                     container.insertBefore(dragSrcEl, el);
                 }
 
-                // Reorder analyzedItems array
                 const moved = analyzedItems.splice(srcIdx, 1)[0];
                 analyzedItems.splice(dstIdx, 0, moved);
-
-                // Update thumbCache keys
                 rebuildThumbCache();
             }
         });
@@ -1415,15 +1452,9 @@
         cancelAllBtn.style.display = 'none';
         dlBtn.disabled = false;
         dlBtn.textContent = 'START DOWNLOAD';
-        if (pollInterval) {
-            clearInterval(pollInterval);
-            pollInterval = null;
-        }
-        // Remove all non-done, non-error items from UI
+        if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
         document.querySelectorAll('.dl-item').forEach(el => {
-            if (!el.classList.contains('done') && !el.classList.contains('error')) {
-                el.remove();
-            }
+            if (!el.classList.contains('done') && !el.classList.contains('error')) el.remove();
         });
     }
 
@@ -1431,12 +1462,8 @@
         const validItems = analyzedItems.filter(x => x.type !== 'error');
         if (validItems.length === 0) return;
 
-        if (pollInterval) {
-            clearInterval(pollInterval);
-            pollInterval = null;
-        }
+        if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
 
-        // Read all values before clearing DOM
         const itemsToSend = [];
         analyzedItems.forEach((x, i) => {
             if (x.type === 'error') return;
@@ -1445,7 +1472,6 @@
             const qual = document.getElementById(`qual-${i}`)?.value || '1080';
             const sub = document.getElementById(`sub-${i}`)?.value || 'none';
             const subLangs = getSelectedLangs(i);
-
             const clipInputsOpen = document.getElementById(`clip-inputs-${i}`)?.classList.contains('open');
             const clipStart = clipInputsOpen ? (document.getElementById(`clip-start-${i}`)?.value || null) : null;
             const clipEnd = clipInputsOpen ? (document.getElementById(`clip-end-${i}`)?.value || null) : null;
@@ -1453,48 +1479,27 @@
             if (x.type === 'playlist') {
                 const selectedEntries = getSelectedEntries(x, i);
                 selectedEntries.forEach(entry => {
-                    itemsToSend.push({
-                        url: entry.url,
-                        title: entry.title,
-                        thumbnail: entry.thumbnail || '',
-                        fmt, qual, sub,
-                        sub_langs: subLangs,
-                        clip_start: clipStart,
-                        clip_end: clipEnd,
-                    });
+                    itemsToSend.push({ url: entry.url, title: entry.title, thumbnail: entry.thumbnail || '', fmt, qual, sub, sub_langs: subLangs, clip_start: clipStart, clip_end: clipEnd });
                 });
             } else {
-                itemsToSend.push({
-                    url: x.url,
-                    title: x.title,
-                    thumbnail: x.thumbnail || '',
-                    fmt, qual, sub,
-                    sub_langs: subLangs,
-                    clip_start: clipStart,
-                    clip_end: clipEnd,
-                });
+                itemsToSend.push({ url: x.url, title: x.title, thumbnail: x.thumbnail || '', fmt, qual, sub, sub_langs: subLangs, clip_start: clipStart, clip_end: clipEnd });
             }
         });
 
         if (itemsToSend.length === 0) return;
 
-        const fmt0 = itemsToSend[0].fmt;
-        const qual0 = itemsToSend[0].qual;
-        const sub0 = itemsToSend[0].sub;
-
         dlBtn.disabled = true;
         dlBtn.textContent = 'DOWNLOADING...';
         cancelAllBtn.style.display = 'block';
-
         analyzeResults.innerHTML = '';
         dlBtn.style.display = 'none';
         document.getElementById('dl-list').innerHTML = '';
 
         const fd = new FormData();
         fd.append('items', JSON.stringify(itemsToSend));
-        fd.append('format_type', fmt0);
-        fd.append('quality', qual0);
-        fd.append('subtitle_mode', sub0);
+        fd.append('format_type', itemsToSend[0].fmt);
+        fd.append('quality', itemsToSend[0].qual);
+        fd.append('subtitle_mode', itemsToSend[0].sub);
 
         const res = await fetch('/download', { method: 'POST', body: fd });
         const result = await res.json();
@@ -1511,7 +1516,6 @@
         pollInterval = setInterval(async () => {
             const dlList = document.getElementById('dl-list');
             if (!dlList) return;
-
             const r = await fetch('/progress');
             const data = await r.json();
 
@@ -1524,11 +1528,9 @@
                     el = document.createElement('div');
                     el.id = `dl-${id}`;
                     el.className = 'dl-item';
-
                     const thumbImg = (thumb.thumbnail || item.thumbnail)
                         ? `<img src="${thumb.thumbnail || item.thumbnail}" alt="">`
                         : `<div class="thumb-no-preview">NO PREVIEW</div>`;
-
                     el.innerHTML = `
                         <div class="dl-thumb-wrap" id="dlthumb-${id}">
                             ${thumbImg}
@@ -1543,15 +1545,13 @@
                             </div>
                             <div class="dl-thumb-overlay">
                                 <div class="play-btn">
-                                    <svg width="18" height="18" viewBox="0 0 20 20" fill="white">
-                                        <polygon points="5,3 18,10 5,17"/>
-                                    </svg>
+                                    <svg width="18" height="18" viewBox="0 0 20 20" fill="white"><polygon points="5,3 18,10 5,17"/></svg>
                                 </div>
                             </div>
                         </div>
                         <div class="dl-bottom">
                             <div class="dl-bottom-title">${item.title}</div>
-                            <div class="dl-actions" id="actions-${id}">
+                            <div class="dl-actions">
                                 <button class="action-btn cancel-btn" id="cancel-btn-${id}" onclick="cancelOne('${id}')">Cancel</button>
                                 <button class="action-btn retry-btn" id="retry-${id}" onclick="retryDownload('${id}')" style="display:none">Retry</button>
                                 <button class="action-btn" id="folder-btn-${id}" onclick="showInFolder('${id}')" style="display:none">Folder</button>
@@ -1560,12 +1560,9 @@
                             </div>
                         </div>
                     `;
-
                     dlList.appendChild(el);
-
                     document.getElementById(`dlthumb-${id}`).addEventListener('click', () => {
-                        const fp = el.dataset.filepath;
-                        if (fp) previewFile(id);
+                        if (el.dataset.filepath) previewFile(id);
                     });
                 }
 
@@ -1701,7 +1698,7 @@
                 ${item.thumbnail ? `<img class="history-thumb" src="${item.thumbnail}" alt="">` : '<div class="history-thumb"></div>'}
                 <div class="history-info">
                     <div class="history-title">${item.title}</div>
-                    <div class="history-meta">${item.format.toUpperCase()} · ${item.quality}${item.format === 'audio' ? ' kbps' : 'p'}</div>
+                    <div class="history-meta">${item.format.toUpperCase()} · ${item.quality && !item.quality.startsWith('http') ? item.quality + (item.format === 'audio' ? ' kbps' : 'p') : item.format === 'audio' ? '192 kbps' : 'Best'}</div>
                 </div>
                 <div class="history-actions">
                     <button class="action-btn" onclick="showInFolderPath('${fp}')">Folder</button>
@@ -1750,6 +1747,199 @@
         previewPlayer.src = `/preview_file?filepath=${encodeURIComponent(fp)}`;
         previewModal.classList.add('open');
         previewPlayer.play();
+    }
+
+    // Kick tab
+    let kickPlaybackUrl = '';
+    let kickThumbnail = '';
+    let kickQualities = [];
+
+    async function kickAnalyze() {
+        const url = document.getElementById('kick-url').value.trim();
+        if (!url) return;
+
+        const btn = document.getElementById('kick-analyze-btn');
+        btn.disabled = true;
+        btn.textContent = 'ANALYZING...';
+        document.getElementById('kick-result').style.display = 'none';
+        document.getElementById('kick-error').style.display = 'none';
+
+        const fd = new FormData();
+        fd.append('url', url);
+
+        const res = await fetch('/kick_analyze', { method: 'POST', body: fd });
+        const data = await res.json();
+
+        btn.disabled = false;
+        btn.textContent = 'ANALYZE';
+
+        if (data.status !== 'success') {
+            document.getElementById('kick-error-msg').textContent = data.message;
+            document.getElementById('kick-error').style.display = 'block';
+            return;
+        }
+
+        kickPlaybackUrl = data.playback_url;
+        kickThumbnail = data.thumbnail;
+        kickQualities = data.qualities || [];
+
+        document.getElementById('kick-title').textContent = data.title;
+        document.getElementById('kick-duration').textContent = data.duration || '';
+
+        const thumbEl = document.getElementById('kick-thumb');
+        const placeholderEl = document.getElementById('kick-thumb-placeholder');
+        if (data.thumbnail) {
+            thumbEl.src = data.thumbnail;
+            thumbEl.style.display = 'block';
+            placeholderEl.style.display = 'none';
+        } else {
+            thumbEl.style.display = 'none';
+            placeholderEl.style.display = 'flex';
+        }
+
+        const qualSel = document.getElementById('kick-qual');
+        qualSel.innerHTML = '';
+        if (kickQualities.length > 0) {
+            kickQualities.forEach(q => {
+                const opt = document.createElement('option');
+                opt.value = q.url;
+                opt.textContent = `${q.height}p`;
+                qualSel.appendChild(opt);
+            });
+        } else {
+            const opt = document.createElement('option');
+            opt.value = kickPlaybackUrl;
+            opt.textContent = 'Best';
+            qualSel.appendChild(opt);
+        }
+
+        document.getElementById('kick-fmt').onchange = function() {
+            const qualSel = document.getElementById('kick-qual');
+            if (this.value === 'audio') {
+                qualSel.innerHTML = `<option value="best">Best</option>`;
+            } else {
+                qualSel.innerHTML = '';
+                if (kickQualities.length > 0) {
+                    kickQualities.forEach(q => {
+                        const opt = document.createElement('option');
+                        opt.value = q.url;
+                        opt.textContent = `${q.height}p`;
+                        qualSel.appendChild(opt);
+                    });
+                } else {
+                    const opt = document.createElement('option');
+                    opt.value = kickPlaybackUrl;
+                    opt.textContent = 'Best';
+                    qualSel.appendChild(opt);
+                }
+            }
+        };
+
+        document.getElementById('kick-result').style.display = 'block';
+    }
+
+    async function kickDownload() {
+        const fmt = document.getElementById('kick-fmt').value;
+        const qualSel = document.getElementById('kick-qual');
+        const selectedUrl = fmt === 'audio' ? kickPlaybackUrl : qualSel.value;
+        if (!selectedUrl) return;
+
+        const title = document.getElementById('kick-title').textContent;
+        const qualLabel = fmt === 'audio' ? '192 kbps' : (qualSel.options[qualSel.selectedIndex]?.textContent || 'Best');
+
+        const fd = new FormData();
+        fd.append('playback_url', selectedUrl);
+        fd.append('title', title);
+        fd.append('fmt', fmt);
+        fd.append('quality', qualLabel);
+        fd.append('thumbnail', kickThumbnail);
+
+        const res = await fetch('/kick_download', { method: 'POST', body: fd });
+        const result = await res.json();
+        if (result.status !== 'success') return;
+
+        document.getElementById('kick-result').style.display = 'none';
+
+        const dlList = document.getElementById('kick-dl-list');
+        dlList.innerHTML = '';
+
+        if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+
+        pollInterval = setInterval(async () => {
+            const r = await fetch('/progress');
+            const data = await r.json();
+            const item = data['kick_0'];
+            if (!item) return;
+
+            let el = document.getElementById('dl-kick_0');
+            if (!el) {
+                el = document.createElement('div');
+                el.id = 'dl-kick_0';
+                el.className = 'dl-item';
+                const thumbImg = kickThumbnail
+                    ? `<img src="${kickThumbnail}" alt="">`
+                    : `<div class="thumb-no-preview">NO PREVIEW</div>`;
+                el.innerHTML = `
+                    <div class="dl-thumb-wrap">
+                        ${thumbImg}
+                        <div class="dl-progress-overlay">
+                            <div class="dl-prog-title">${item.title}</div>
+                            <div class="dl-prog-status" id="status-kick_0">Waiting...</div>
+                            <div class="bar-bg"><div class="bar-fill" id="bar-kick_0"></div></div>
+                            <div class="dl-prog-meta">
+                                <span id="speed-kick_0">—</span>
+                                <span id="eta-kick_0">—</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="dl-bottom">
+                        <div class="dl-bottom-title">${item.title}</div>
+                        <div class="dl-actions">
+                            <button class="action-btn cancel-btn" id="cancel-btn-kick_0" onclick="cancelOne('kick_0')">Cancel</button>
+                            <button class="action-btn" id="folder-btn-kick_0" onclick="showInFolder('kick_0')" style="display:none">Folder</button>
+                            <button class="action-btn open-btn" id="open-btn-kick_0" onclick="openFile('kick_0')" style="display:none">Open</button>
+                            <button class="action-btn remove-btn" id="remove-btn-kick_0" onclick="document.getElementById('dl-kick_0')?.remove()" style="display:none">✕</button>
+                        </div>
+                    </div>
+                `;
+                dlList.appendChild(el);
+            }
+
+            const statusEl = document.getElementById('status-kick_0');
+            const barEl = document.getElementById('bar-kick_0');
+            const speedEl = document.getElementById('speed-kick_0');
+            const etaEl = document.getElementById('eta-kick_0');
+
+            if (statusEl) statusEl.textContent = item.status;
+            if (barEl) barEl.style.width = item.percent + '%';
+            if (speedEl) speedEl.textContent = item.speed !== '-' ? item.speed : '—';
+            if (etaEl) etaEl.textContent = item.eta !== '-' ? `ETA ${item.eta}` : '—';
+
+            if (item.done) {
+                el.className = 'dl-item done';
+                if (barEl) barEl.className = 'bar-fill done';
+                if (item.filepath) el.dataset.filepath = item.filepath;
+                document.getElementById('cancel-btn-kick_0')?.style.setProperty('display', 'none');
+                document.getElementById('folder-btn-kick_0')?.style.setProperty('display', '');
+                document.getElementById('open-btn-kick_0')?.style.setProperty('display', '');
+                document.getElementById('remove-btn-kick_0')?.style.setProperty('display', '');
+                clearInterval(pollInterval);
+                pollInterval = null;
+                loadHistory();
+            } else if (item.error) {
+                el.className = 'dl-item error';
+                document.getElementById('cancel-btn-kick_0')?.style.setProperty('display', 'none');
+                document.getElementById('remove-btn-kick_0')?.style.setProperty('display', '');
+                clearInterval(pollInterval);
+                pollInterval = null;
+            } else if (item.cancelled) {
+                el.className = 'dl-item cancelled';
+                document.getElementById('cancel-btn-kick_0')?.style.setProperty('display', 'none');
+                document.getElementById('remove-btn-kick_0')?.style.setProperty('display', '');
+                clearInterval(pollInterval);
+                pollInterval = null;
+            }
+        }, 800);
     }
 </script>
 </body>

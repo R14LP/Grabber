@@ -306,13 +306,9 @@ def update_ytdlp():
             }
         try:
             python_exe = get_python_exe()
-            kwargs = {
-                'capture_output': True,
-                'text': True,
-            }
+            kwargs = {'capture_output': True, 'text': True}
             if sys.platform == 'win32':
                 kwargs['creationflags'] = subprocess.CREATE_NO_WINDOW
-
             result = subprocess.run(
                 [python_exe, '-m', 'pip', 'install', '--upgrade', 'yt-dlp', '--quiet'],
                 **kwargs
@@ -586,6 +582,234 @@ def preview_file():
     if filepath and os.path.exists(filepath):
         return send_file(filepath)
     return "File not found", 404
+
+@app.route('/kick_analyze', methods=['POST'])
+def kick_analyze():
+    import urllib.request
+    url = request.form.get('url', '').strip()
+    if not url:
+        return jsonify({"status": "error", "message": "No URL provided."})
+
+    try:
+        vod_match = re.search(r'/videos/([a-f0-9\-]{36})', url)
+        clip_match = re.search(r'/clips/([A-Za-z0-9_\-]+)', url) or re.search(r'/clip/([A-Za-z0-9_\-]+)', url)
+
+        headers = {
+            'Accept': 'application/json',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        }
+
+        if vod_match:
+            uuid = vod_match.group(1)
+            api_url = f'https://kick.com/api/v1/video/{uuid}'
+            req = urllib.request.Request(api_url, headers=headers)
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                data = json.loads(resp.read().decode())
+
+            playback_url = data.get('source') or data.get('playback_url') or data.get('stream', {}).get('url')
+            title = data.get('session_title') or data.get('title') or 'Kick VOD'
+            thumbnail = data.get('thumbnail') or (data.get('channel', {}) or {}).get('banner_image', {}).get('url', '')
+            duration = data.get('duration', 0)
+            duration_str = f"{int(duration)//3600}h {(int(duration)%3600)//60}m" if duration else ''
+
+            qualities = []
+            if playback_url:
+                try:
+                    m3u8_req = urllib.request.Request(playback_url, headers=headers)
+                    with urllib.request.urlopen(m3u8_req, timeout=15) as m3u8_resp:
+                        m3u8_content = m3u8_resp.read().decode()
+                    base_url = playback_url.rsplit('/', 1)[0]
+                    lines = m3u8_content.splitlines()
+                    for i, line in enumerate(lines):
+                        if line.startswith('#EXT-X-STREAM-INF'):
+                            res_match = re.search(r'RESOLUTION=(\d+)x(\d+)', line)
+                            if res_match:
+                                height = int(res_match.group(2))
+                                stream_url = lines[i+1] if i+1 < len(lines) else ''
+                                if stream_url and not stream_url.startswith('http'):
+                                    stream_url = base_url + '/' + stream_url
+                                qualities.append({'height': height, 'url': stream_url})
+                    qualities.sort(key=lambda x: x['height'], reverse=True)
+                except:
+                    pass
+
+            return jsonify({
+                "status": "success",
+                "type": "vod",
+                "title": title,
+                "thumbnail": thumbnail,
+                "duration": duration_str,
+                "playback_url": playback_url,
+                "qualities": qualities,
+            })
+
+        elif clip_match:
+            clip_id = clip_match.group(1)
+            api_url = f'https://kick.com/api/v2/clips/{clip_id}'
+            req = urllib.request.Request(api_url, headers=headers)
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                data = json.loads(resp.read().decode())
+
+            clip_data = data.get('clip', data)
+            playback_url = clip_data.get('clip_url') or clip_data.get('playback_url')
+            title = clip_data.get('title') or 'Kick Clip'
+            thumbnail = clip_data.get('thumbnail_url') or ''
+            duration = clip_data.get('duration', 0)
+            duration_str = f"{int(duration)}s" if duration else ''
+
+            qualities = []
+            if playback_url:
+                try:
+                    m3u8_req = urllib.request.Request(playback_url, headers={'User-Agent': 'Mozilla/5.0'})
+                    with urllib.request.urlopen(m3u8_req, timeout=15) as m3u8_resp:
+                        m3u8_content = m3u8_resp.read().decode()
+                    base_url = playback_url.rsplit('/', 1)[0]
+                    lines = m3u8_content.splitlines()
+                    for i, line in enumerate(lines):
+                        if line.startswith('#EXT-X-STREAM-INF'):
+                            res_match = re.search(r'RESOLUTION=(\d+)x(\d+)', line)
+                            if res_match:
+                                height = int(res_match.group(2))
+                                stream_url = lines[i+1] if i+1 < len(lines) else ''
+                                if stream_url and not stream_url.startswith('http'):
+                                    stream_url = base_url + '/' + stream_url
+                                qualities.append({'height': height, 'url': stream_url})
+                    qualities.sort(key=lambda x: x['height'], reverse=True)
+                except:
+                    pass
+
+            return jsonify({
+                "status": "success",
+                "type": "clip",
+                "title": title,
+                "thumbnail": thumbnail,
+                "duration": duration_str,
+                "playback_url": playback_url,
+                "qualities": qualities,
+            })
+
+        else:
+            return jsonify({"status": "error", "message": "Invalid Kick URL. Paste a VOD or clip link."})
+
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)})
+
+
+@app.route('/kick_download', methods=['POST'])
+def kick_download():
+    playback_url = request.form.get('playback_url')
+    title = request.form.get('title', 'kick_download')
+    fmt = request.form.get('fmt', 'video')
+    quality = request.form.get('quality', 'Best')
+    thumbnail = request.form.get('thumbnail', '')
+
+    if not playback_url:
+        return jsonify({"status": "error", "message": "No playback URL."})
+
+    vid_id = 'kick_0'
+    with downloads_lock:
+        downloads.clear()
+        downloads[vid_id] = {
+            'title': title,
+            'url': playback_url,
+            'status': 'Waiting...',
+            'percent': 0.0,
+            'speed': '-',
+            'eta': '-',
+            'done': False,
+            'error': False,
+            'cancelled': False,
+            'filepath': None,
+            'thumbnail': thumbnail,
+            'fmt': fmt,
+            'qual': quality,
+            'sub': 'none',
+            'sub_langs': [],
+        }
+
+    with cancel_flags_lock:
+        cancel_flags.clear()
+
+    ext = 'mp3' if fmt == 'audio' else 'mp4'
+    temp_prefix = 'ytdl_tmp_kick_0_'
+
+    def run():
+        with downloads_lock:
+            downloads[vid_id]['status'] = 'Starting...'
+        with cancel_flags_lock:
+            cancel_flags[vid_id] = False
+
+        try:
+            if fmt == 'audio':
+                ydl_opts = {
+                    'outtmpl': os.path.join(DOWNLOAD_FOLDER, f'{temp_prefix}%(title)s.%(ext)s'),
+                    'quiet': True,
+                    'progress_hooks': [make_hook(vid_id)],
+                    'ffmpeg_location': app_path,
+                    'format': 'bestaudio/best',
+                    'postprocessors': [
+                        {'key': 'FFmpegExtractAudio', 'preferredcodec': 'mp3', 'preferredquality': '192'},
+                    ],
+                }
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    ydl.download([playback_url])
+                filepath = None
+                for f in os.listdir(DOWNLOAD_FOLDER):
+                    if f.startswith(temp_prefix) and f.endswith('.mp3'):
+                        old = os.path.join(DOWNLOAD_FOLDER, f)
+                        new = get_unique_filepath(DOWNLOAD_FOLDER, title, 'mp3')
+                        os.rename(old, new)
+                        filepath = new
+                        break
+            else:
+                filepath = get_unique_filepath(DOWNLOAD_FOLDER, title, 'mp4')
+                cmd = [
+                    os.path.join(app_path, 'ffmpeg'),
+                    '-i', playback_url,
+                    '-c', 'copy',
+                    '-y',
+                    filepath
+                ]
+                kwargs = {'capture_output': True}
+                if sys.platform == 'win32':
+                    kwargs['creationflags'] = subprocess.CREATE_NO_WINDOW
+                result = subprocess.run(cmd, **kwargs)
+                if result.returncode != 0:
+                    raise Exception('ffmpeg failed')
+
+            with downloads_lock:
+                downloads[vid_id]['status'] = 'Done'
+                downloads[vid_id]['percent'] = 100.0
+                downloads[vid_id]['done'] = True
+                downloads[vid_id]['filepath'] = filepath
+
+            with history_lock:
+                history.append({
+                    'title': title,
+                    'filepath': filepath,
+                    'thumbnail': thumbnail,
+                    'format': fmt,
+                    'quality': '192' if fmt == 'audio' else quality,
+                })
+
+        except Exception as e:
+            err_msg = str(e)
+            is_cancelled = 'Cancelled' in err_msg or cancel_flags.get(vid_id, False)
+            with downloads_lock:
+                if is_cancelled:
+                    downloads[vid_id]['status'] = 'Cancelled'
+                    downloads[vid_id]['cancelled'] = True
+                    downloads[vid_id]['error'] = False
+                else:
+                    downloads[vid_id]['status'] = f'Error: {err_msg[:80]}'
+                    downloads[vid_id]['error'] = True
+
+    t = threading.Thread(target=run)
+    t.daemon = True
+    t.start()
+
+    return jsonify({"status": "success"})
+
 
 def start_server():
     app.run(port=5000, use_reloader=False)

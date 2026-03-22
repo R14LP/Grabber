@@ -1,10 +1,15 @@
 # YT Downloader
-
 A fast, dark-themed video and audio downloader built with Python and Flask.
 
 [Download Latest Version](https://github.com/R14LP/YT-Downloader/releases/latest)
 
 ## Changelog
+
+### v2.1.0
+- Added Kick.com tab — download VODs and clips
+- VOD quality selection (1080p, 720p, 480p, 160p) via m3u8 parsing
+- MP3 audio download support for Kick VODs
+- Fixed history showing wrong format label for Kick downloads
 
 ### v2.0.1
 - Fixed UPDATE button opening a new window
@@ -13,8 +18,8 @@ A fast, dark-themed video and audio downloader built with Python and Flask.
 - Initial major release
 
 ## Features
-
 - **Analyze before download:** See thumbnail, title, duration and available resolutions before downloading
+- **Kick.com Support:** Download Kick VODs and clips directly, with quality selection
 - **Clip download:** Download a specific time range — set start and end in seconds
 - **Turbo Mode:** 10 simultaneous fragment downloads per file
 - **Parallel downloads:** Download multiple videos at the same time (configurable 1-5)
@@ -51,7 +56,6 @@ pip install flask yt-dlp pywebview pillow
 ```
 
 **3. Get ffmpeg**
-
 Download from https://www.gyan.dev/ffmpeg/builds/ — grab the `ffmpeg-release-essentials` build.
 Extract `ffmpeg.exe` and `ffprobe.exe`, place them in the same folder as `app.py`.
 
@@ -61,14 +65,11 @@ python app.py
 ```
 
 ## Building
-
 Place `ffmpeg.exe`, `ffprobe.exe`, and `icon.ico` next to `app.py` before building.
 ```bash
 py -m PyInstaller --clean --onefile --noconsole --add-data "templates;templates" --icon "icon.ico" --name "YT_Downloader" app.py
 ```
-
 After building, place `ffmpeg.exe` and `ffprobe.exe` next to `YT_Downloader.exe` in `dist/`.
 
 ## License
-
 MIT License - feel free to use and modify!
