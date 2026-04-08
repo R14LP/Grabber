@@ -1,9 +1,17 @@
-# YT Downloader
+# Grabber
 A fast, dark-themed video and audio downloader built with Python and Flask.
 
-[Download Latest Version](https://github.com/R14LP/YT-Downloader/releases/latest)
+[Download Latest Version](https://github.com/R14LP/Grabber/releases/latest)
 
 ## Changelog
+
+### v2.3.0 (Major Update)
+- **Project Renamed:** Now officially "Grabber" (GR.AB)
+- **Browser Extension:** Deep integration with Chrome, Firefox, and Chromium browsers via Native Messaging.
+- **In-Browser Overlay:** "⬇ GRAB" button appears directly on videos, toggleable via customizable keyboard shortcuts (Default: `Alt+D`).
+- **Send to App:** Send any open page or download link directly to the app from the browser.
+- **Universal File Downloading:** Direct file downloads (generic) now bypass Cloudflare and anti-bot protections using `curl_cffi` browser impersonation.
+- **One-Click Installer:** Added Inno Setup script for seamless Windows installation and automatic Registry configuration.
 
 ### v2.1.0
 - Added Kick.com tab — download VODs and clips
@@ -46,13 +54,13 @@ A fast, dark-themed video and audio downloader built with Python and Flask.
 
 **1. Clone the repo**
 ```bash
-git clone https://github.com/R14LP/YT-Downloader.git
+git clone https://github.com/R14LP/Grabber.git
 cd YT-Downloader
 ```
 
 **2. Install dependencies**
 ```bash
-pip install flask yt-dlp pywebview pillow
+pip install flask yt-dlp pywebview pillow curl_cffi requests
 ```
 
 **3. Get ffmpeg**
@@ -67,7 +75,8 @@ python app.py
 ## Building
 Place `ffmpeg.exe`, `ffprobe.exe`, and `icon.ico` next to `app.py` before building.
 ```bash
-py -m PyInstaller --clean --onefile --noconsole --add-data "templates;templates" --icon "icon.ico" --name "YT_Downloader" app.py
+pyinstaller --clean --onefile --noconsole native_host.py
+pyinstaller --clean --onefile --noconsole --add-data "templates;templates" --icon "icon.ico" --name "Grabber" app.py
 ```
 After building, place `ffmpeg.exe` and `ffprobe.exe` next to `YT_Downloader.exe` in `dist/`.
 
