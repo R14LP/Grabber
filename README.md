@@ -50,6 +50,15 @@ A fast, dark-themed video and audio downloader built with Python and Flask.
 - **Responsive UI:** Dark theme, scales with window size
 - **Settings persistence:** All settings saved to config between sessions
 
+## Installation (Windows)
+
+1. Go to [Releases](https://github.com/R14LP/Grabber/releases/latest) and download `Grabber_Setup_v2.3.0.exe`.
+2. Run the setup to install Grabber.
+3. Open your browser's extension page (e.g., `chrome://extensions`).
+4. Enable **Developer Mode**.
+5. Click **Load unpacked** and select the `extension` folder from the source code.
+6. Press `Alt+D` on any video to reveal the download button!
+
 ## Running from Source
 
 **1. Clone the repo**
