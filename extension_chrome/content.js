@@ -104,7 +104,7 @@ function addDownloadButton(videoEl) {
     e.stopPropagation();
     chrome.runtime.sendMessage({ action: 'send_to_app', url: window.location.href });
     
-    btn.innerText = 'GÖNDERİLDİ';
+    btn.innerText = 'SENT';
     btn.style.backgroundColor = '#00ff9d';
     btn.style.color = '#000';
     setTimeout(() => {
